@@ -14,18 +14,18 @@ Created on Thu Sep 27 14:48:19 2018
 import datetime as dt
 import numpy as np
 import sounddevice as sd 
-import soundfile 
+import soundfile as sf
 import time 
-import Queue 
+import queue 
 import matplotlib.pyplot as plt 
 plt.rcParams['agg.path.chunksize'] = 10000
 
 
-def scheduled_multichannel_recorder(start_end_time,
+def scheduled_multichannel_recorder(end_time_HHMM,
                                     destination_folder,
                                     device_name= 'M-Audio M-Track Eight ASIO (64)',
                                     num_channels=8,
-                                    samplerate=44100,                                    
+                                    fs=44100,                                    
                                     **kwargs):
     ''' This function inititates recording at a user-given time
     from the audio device  and continues the recording until the 
@@ -37,7 +37,7 @@ def scheduled_multichannel_recorder(start_end_time,
     
     Parameters:
         
-        start_end_time : tuple with 2 string entries. The timestamp must
+        end_time_HHMM : string. The timestamp must
                          be in HH:MM 24 hour format. eg. 13:15
         
         destination_folder : string. The location where the file is to be 
@@ -75,67 +75,48 @@ def scheduled_multichannel_recorder(start_end_time,
                       'Expt1', then all the files will be called 
                       'Expt1_2018-09-29_20-02-23.wav'
         
-        block_size : int. Number of samples to be read in every call 
-                     to the sounddevic Stream. Defaults to 4096.   
-    
+
     Returns:
 
         multichannel wav file        
     '''
-    input_start_time, input_end_time = start_end_time
-
-    YDM_today = get_YDM_fortoday()
-    start_time_string = YDM_today +'_' + input_start_time
-    end_time_string = YDM_today + '_' + input_end_time
-    
-    start_time = convert_YDMHHmm_to_posix(start_time_string)
-    end_time = convert_YDMHHmm_to_posix(end_time_string)
-   
-    
-
-    assert (end_time > start_time), 'End of recording time is earlier \
-    than start time!!'
 
     assert (num_channels >=1), 'The number of recording channels must be >=1'
 
-    #assert(start_time >= time.time()), 'The start time has already passed !!'
+    YDM_today = get_YDM_fortoday()
     
-    if 'block_size' not in kwargs.keys():
-        block_size = 4096
+    end_time_string = YDM_today + '_' + end_time_HHMM
+    
+    end_time = convert_YDMHHmm_to_posix(end_time_string)
+
+    if 'file_prefix' not in kwargs.keys():
+        
+        file_prefix = 'Recording_'
     else:
-        block_size = kwargs['block_size']
+        file_prefix = kwargs['file_prefix']
 
-    device_indnum = get_device_indexnumber(device_name)
-    print(device_name, device_indnum)
+    dev_num = get_device_indexnumber(device_name)
 
-    S = sd.Stream(samplerate=samplerate, blocksize=block_size,
-                  device=device_indnum, channels=num_channels)
+    start_timestamp = make_timestamp()
+    file_name = destination_folder+ file_prefix+'_' +start_timestamp+'.wav'
 
-    q = Queue.Queue()
-    print(time.time(), start_time)
-
-    while time.time() < start_time:
-        # do nothing in particular and wait for 1 second
-        time.sleep(1)
-
-    if time.time() >= start_time:
-        print('Recording has begun.....')
-
-        S.start()
-        i = 0 
-        while time.time() <= end_time:
-            
-            in_data, overflowed = S.read(block_size)
-            
-            if not overflowed  & i > 0 :
-                q.put(in_data)
-
+    with sf.SoundFile(file_name, mode='w', samplerate=fs,
+                      channels=num_channels) as f:
     
-    all_buffers = empty_qcontentsintolist(q)
-    save_qcontents_aswav(all_buffers, destination_folder, samplerate,
-                        num_channels)
-        
-        
+        with sd.InputStream(samplerate=fs, device=dev_num,
+    							channels=num_channels, callback=callback_function):
+           while time.time() < end_time:    
+                f.write(q.get())
+
+q = queue.Queue()      
+
+def callback_function(indata, frames, time, status):
+    	"""This is called (from a separate thread) for each audio block."""
+    	if status:
+    		print(status)
+    	q.put(indata.copy())
+
+
 def get_device_indexnumber(device_name):
     '''
     Check for the device name in all of the recognised devices and
@@ -172,50 +153,6 @@ def get_device_indexnumber(device_name):
     return(tgt_ind)
 
 
-def empty_qcontentsintolist(q):
-    '''
-    this function is taken from the fieldrecorder recording class.
-
-    '''
-    try:
-        q_contents = [ q.get() for i in range(q.qsize()) ]
-
-    except:
-        raise IOError('Unable to empty queue object contents')
-
-    return(q_contents)
-
-def save_qcontents_aswav(q_contents, destination_folder, fs, num_channels):
-    '''
-    this function is taken from the fieldrecorder recording class.
-
-    '''
-
-    print('Saving file now...')
-
-    rec = np.concatenate(q_contents)
-    save_channels = range(num_channels)
-    print(rec.shape)
-    rec2besaved = rec[:,save_channels]
-
-    timenow = dt.datetime.now()
-    timestamp = timenow.strftime('%Y-%m-%d_%H-%M-%S')
-    idnumber =  int(time.mktime(timenow.timetuple())) #the unix time which provides a 10 digit unique identifier
-
-    main_filename = 'MULTIWAV_' + timestamp+'_'+str(idnumber) +'.WAV'
-
-    try:
-        print('trying to save file... ')
-
-        soundfile.write(destination_folder+main_filename,rec2besaved,fs)
-
-        print('File saved')
-
-        pass
-
-    except:
-        raise IOError('Could not save file !!')
-
 def get_YDM_fortoday():
     '''get year date and month for today and output it as
     YYYY-MM-DD string.
@@ -236,23 +173,26 @@ def convert_YDMHHmm_to_posix(timestamp):
     posix_targettime = time.mktime(target_time.timetuple())
     return(posix_targettime)
 
+def make_timestamp():
+    '''Makes a YYYY-mm-dd_HH-MM-SS timestampe of when the file was initiated'''
+    now = dt.datetime.now()
+    timestamp = dt.datetime.strftime(now, '%Y-%m-%d_%H-%M-%S')
+    return(timestamp)
         
 if __name__ == '__main__':
     
     # define the start and stop times of the recording to be run
     timenow = dt.datetime.now()
     hour, minute = timenow.hour, timenow.minute
-    
-    start_time = str(timenow.hour)+':'+str(timenow.minute+1)
-    end_time = str(timenow.hour)+':'+str(timenow.minute+20)
-    
-    start_stop_time = (start_time,end_time)
+
+    stop_time = str(timenow.hour)+':'+str(timenow.minute+2)
 
     folder_location = 'C://Users//tbeleyur//Documents//figuring_out//sueanne//'
-
-    scheduled_multichannel_recorder(start_stop_time, 
+    dev_name = 'Microsoft Sound Mapper - Input'
+    scheduled_multichannel_recorder(stop_time, 
                                     destination_folder = folder_location,
-									num_channels=3
+									device_name = dev_name,
+                                    num_channels=2,
                                     )   
     
     
