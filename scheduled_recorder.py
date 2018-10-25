@@ -6,6 +6,10 @@ and a WAV file is saved at the required folder destination.
 This script was originally written to run Dr. Sue Anne Zollinger's
 8-channel recording system. 
 
+The file creation+ use of queues in the function scheduled_multichannel_recorder
+is adapted from rec_unlimited.py by Matthias Geier, from the sounddevice 'More Examples' 
+page.
+
 Created on Thu Sep 27 14:48:19 2018
 
 @author: Thejasvi Beleyur
@@ -98,10 +102,10 @@ def scheduled_multichannel_recorder(end_time_HHMM,
     dev_num = get_device_indexnumber(device_name)
 
     start_timestamp = make_timestamp()
-    file_name = destination_folder+ file_prefix+'_' +start_timestamp+'.wav'
+    file_name = destination_folder+ file_prefix+'_' +start_timestamp+'.flac'
 
     with sf.SoundFile(file_name, mode='w', samplerate=fs,
-                      channels=num_channels, subtype='PCM_U8') as f:
+                      channels=num_channels) as f:
     
         with sd.InputStream(samplerate=fs, device=dev_num,
     							channels=num_channels, callback=callback_function):
