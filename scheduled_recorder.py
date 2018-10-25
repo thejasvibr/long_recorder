@@ -240,12 +240,19 @@ def convert_YDMHHmm_to_posix(timestamp):
 if __name__ == '__main__':
     
     # define the start and stop times of the recording to be run
-    start_stop_time = ('16:39','16:40')
+    timenow = dt.datetime.now()
+    hour, minute = timenow.hour, timenow.minute
+    
+    start_time = str(timenow.hour)+':'+str(timenow.minute+1)
+    end_time = str(timenow.hour)+':'+str(timenow.minute+20)
+    
+    start_stop_time = (start_time,end_time)
 
-    folder_location = 'C://Users//tbeleyur//Desktop//'
+    folder_location = 'C://Users//tbeleyur//Documents//figuring_out//sueanne//'
 
-    o =scheduled_multichannel_recorder(start_stop_time, 
+    scheduled_multichannel_recorder(start_stop_time, 
                                     destination_folder = folder_location,
+									num_channels=3
                                     )   
     
     
