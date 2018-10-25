@@ -101,7 +101,7 @@ def scheduled_multichannel_recorder(end_time_HHMM,
     file_name = destination_folder+ file_prefix+'_' +start_timestamp+'.wav'
 
     with sf.SoundFile(file_name, mode='w', samplerate=fs,
-                      channels=num_channels) as f:
+                      channels=num_channels, subtype='PCM_U8') as f:
     
         with sd.InputStream(samplerate=fs, device=dev_num,
     							channels=num_channels, callback=callback_function):
