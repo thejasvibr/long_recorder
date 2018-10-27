@@ -6,6 +6,10 @@ and a WAV file is saved at the required folder destination.
 This script was originally written to run Dr. Sue Anne Zollinger's
 8-channel recording system. 
 
+The file creation+ use of queues in the function scheduled_multichannel_recorder
+is adapted from rec_unlimited.py by Matthias Geier, from the sounddevice 'More Examples' 
+page.
+
 Created on Thu Sep 27 14:48:19 2018
 
 @author: Thejasvi Beleyur
@@ -21,7 +25,7 @@ import matplotlib.pyplot as plt
 plt.rcParams['agg.path.chunksize'] = 10000
 
 
-def scheduled_multichannel_recorder(end_time_HHMM,
+def scheduled_multichannel_recorder(duration_HHMM,
                                     destination_folder,
                                     device_name= 'M-Audio M-Track Eight ASIO (64)',
                                     num_channels=8,
@@ -31,14 +35,16 @@ def scheduled_multichannel_recorder(end_time_HHMM,
     from the audio device  and continues the recording until the 
     required end time. 
     
-    Each file is saved with the timestamp the file was
-    saved at in the end of the filename.
+    Each file is saved with the timestamp the file was created at.
 
+    Warning: The file durations can vary +/- 1-2 seconds perhaps depending
+    on the latency of the computer on which it is run. 
     
     Parameters:
         
-        end_time_HHMM : string. The timestamp must
-                         be in HH:MM 24 hour format. eg. 13:15
+        duration_HHMM : string. The duration must
+                         be in HH:MM. eg. if you want the recording to run for
+                         9 hours, then then the entry should be '9:00'
         
         destination_folder : string. The location where the file is to be 
                               saved.
@@ -83,11 +89,12 @@ def scheduled_multichannel_recorder(end_time_HHMM,
 
     assert (num_channels >=1), 'The number of recording channels must be >=1'
 
-    YDM_today = get_YDM_fortoday()
-    
-    end_time_string = YDM_today + '_' + end_time_HHMM
-    
-    end_time = convert_YDMHHmm_to_posix(end_time_string)
+    rec_durn = dt.datetime.strptime(duration_HHMM, '%H:%M')
+    add_hours, add_minutes = rec_durn.hour, rec_durn.minute
+    end_timestamp = dt.datetime.now() + dt.timedelta(hours=add_hours,
+                                                  minutes=add_minutes)
+    end_time_string = end_timestamp.strftime('%Y-%m-%d_%H:%M:%S')
+    end_time = convert_YDmHMS_to_posix(end_time_string)
 
     if 'file_prefix' not in kwargs.keys():
         
@@ -99,14 +106,16 @@ def scheduled_multichannel_recorder(end_time_HHMM,
 
     start_timestamp = make_timestamp()
     file_name = destination_folder+ file_prefix+'_' +start_timestamp+'.wav'
-
+    
     with sf.SoundFile(file_name, mode='w', samplerate=fs,
-                      channels=num_channels) as f:
+                      channels=num_channels, subtype='PCM_U8') as f:
     
         with sd.InputStream(samplerate=fs, device=dev_num,
     							channels=num_channels, callback=callback_function):
            while time.time() < end_time:    
                 f.write(q.get())
+
+
 
 q = queue.Queue()      
 
@@ -152,24 +161,14 @@ def get_device_indexnumber(device_name):
     
     return(tgt_ind)
 
-
-def get_YDM_fortoday():
-    '''get year date and month for today and output it as
-    YYYY-MM-DD string.
-    '''
-    timenow = dt.datetime.now()
-    year, month, day = timenow.year, timenow.month, timenow.day
-    YDM_timestamp = str(year)+'-'+str(month)+'-'+str(day)
-    return(YDM_timestamp)    
-
-def convert_YDMHHmm_to_posix(timestamp):
+def convert_YDmHMS_to_posix(timestamp):
     '''
     thanks to Laurent Laporte ! 
     https://tinyurl.com/yd7bdrbp
 
     '''
     # convert the string timestamp into a time object
-    target_time = dt.datetime.strptime(timestamp, '%Y-%m-%d_%H:%M')
+    target_time = dt.datetime.strptime(timestamp, '%Y-%m-%d_%H:%M:%S')
     posix_targettime = time.mktime(target_time.timetuple())
     return(posix_targettime)
 
@@ -181,15 +180,11 @@ def make_timestamp():
         
 if __name__ == '__main__':
     
-    # define the start and stop times of the recording to be run
-    timenow = dt.datetime.now()
-    hour, minute = timenow.hour, timenow.minute
-
-    stop_time = str(timenow.hour)+':'+str(timenow.minute+2)
-
+    duration = '0:01'
+    
     folder_location = 'C://Users//tbeleyur//Documents//figuring_out//sueanne//'
     dev_name = 'Microsoft Sound Mapper - Input'
-    scheduled_multichannel_recorder(stop_time, 
+    a = scheduled_multichannel_recorder(duration, 
                                     destination_folder = folder_location,
 									device_name = dev_name,
                                     num_channels=2,
